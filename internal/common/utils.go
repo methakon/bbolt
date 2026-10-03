@@ -7,15 +7,39 @@ import (
 	"unsafe"
 )
 
+// LoadBucket returns an InBucket viewing buf in place.
+//
+// The on-disk value of a leaf element starts at pos+ksize, so an odd-length key
+// can place it on an address that is not 8-byte aligned, and InBucket is two
+// uint64s. That is a misaligned 64-bit access: fine on amd64, but it faults
+// with SIGBUS on architectures that require alignment.
+//
+// NOTE: the result deliberately aliases buf. Callers such as the surgeon mutate
+// the returned struct and then write buf back, so decoding into a fresh struct
+// would silently discard those edits. Anything that only reads should not rely
+// on that aliasing; anything that writes must go through buf.
 func LoadBucket(buf []byte) *InBucket {
+	if len(buf) < BucketHeaderSize {
+		return &InBucket{}
+	}
 	return (*InBucket)(unsafe.Pointer(&buf[0]))
 }
 
+// LoadPage returns a Page viewing buf in place; see LoadBucket for why the
+// result aliases buf.
 func LoadPage(buf []byte) *Page {
+	if len(buf) < int(PageHeaderSize) {
+		return &Page{}
+	}
 	return (*Page)(unsafe.Pointer(&buf[0]))
 }
 
+// LoadPageMeta returns a Meta viewing buf in place, starting after the page
+// header; see LoadBucket for why the result aliases buf.
 func LoadPageMeta(buf []byte) *Meta {
+	if len(buf) < int(PageHeaderSize)+int(unsafe.Sizeof(Meta{})) {
+		return &Meta{}
+	}
 	return (*Meta)(unsafe.Pointer(&buf[PageHeaderSize]))
 }
 
